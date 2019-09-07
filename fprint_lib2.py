@@ -5,9 +5,19 @@ Check USB port: ls /dev/tty*
 import time
 import fprint_lib
 import serial
+import csv
+import pandas as pd
+import time
 
 uart = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
 finger = fprint_lib.Fingerprint_Lib(uart)
+df = pd.read_csv('finger_file.csv', index_col='Names')
+username_col = df.iloc[:,0]
+template_1_col = df.iloc[:,1]
+template_2_col = df.iloc[:,2]
+attempt = 0
+
+print(df)
 
 def get_fingerprint():
     """Get a finger print image, template it, and see if it matches!"""
@@ -22,7 +32,7 @@ def get_fingerprint():
         return False
     return True
 
-def register_finger(location):
+def register_finger(location, username, mode):
     """Take a 2 finger images and template it, then store in 'location'"""
     for fingerimg in range(1, 3):
         if fingerimg == 1:
@@ -80,6 +90,15 @@ def register_finger(location):
     i = finger.store_model(location)
     if i == fprint_lib.OK:
         print("Stored")
+        #WRITE_NAME@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        if mode == 1:
+            with open ('finger_file.csv', mode='a') as append_file:
+                new_user = [username, username, location, location + 63]
+                append = csv.writer(append_file)
+                append.writerow(new_user)
+                attempt = 1
+        else:
+            pass
     else:
         if i == fprint_lib.BADLOCATION:
             print("Bad storage location")
@@ -91,8 +110,21 @@ def register_finger(location):
 
     return True
 
-def get_num():
-    #Use input() to get a valid number from 1 to 127. Retry till success!
+def register_get_num():
+    i = 1
+    j = 0
+    k = len(template_1_col)
+    while i <= k:
+        if i == template_1_col[j]:
+            i +=1
+            j +=1
+        else:
+            break
+    print("Your USER ID: ", i)
+    return i
+
+def delete_get_num():
+    #Use input() to get a valid number from 1 to 63. Retry till success!
     i = 0
     while (i > 63) or (i < 1):
         try:
@@ -101,39 +133,67 @@ def get_num():
             pass
     return i 
 
+def read_name(username):
+    i = 0
+    while template_1_col[i] != username:
+        i +=1
+    print(f'Welcome {username_col[i]}')
+        
+def delete_name(username):
+    i = 0
+    while template_1_col[i] != username:
+        i +=1
+    df.drop([username_col[i]], axis=0, inplace=True)
+    df.to_csv('finger_file.csv')
+
 #######################################################################
 
 def register_fingerprint():
-    print("Input password: ")
-    j = input("> ")
-    if j == 'fourfang':
-        if fprint.read_templates() != fprint_lib2.fprint_lib.OK:
+    i = 0
+    password = input("Input password: ")
+    if password == 'ff':
+        if finger.read_templates() != fprint_lib.OK:
             raise RuntimeError('Failed to read templates')
         print("Fingerprint templates occupied:", finger.templates)
-        k = get_num()
-        register_finger(k)
+        template_id = register_get_num()
+        username = input("Input your name: ")
+        register_finger(template_id, username, 1)
         print("Repeat again")
         time.sleep(0.5)
-        register_finger(k + 63)
+        if attempt == 1:
+            register_finger(template_id + 63, username, 0)
+        else:
+            pass
     else:
-        raise RuntimeError('Incorrect password!')
+        print("Wrong password!")
 
 def identify_fingerprint():
     if get_fingerprint():
         if finger.confidence >= 100:
             print("Detected #", finger.finger_id, "with confidence", finger.confidence)
+            if finger.finger_id > 63:
+                read_name(finger.finger_id - 63)
+            else:
+                read_name(finger.finger_id)
         else:
-            raise RuntimeError('Low confidence!')
+            print('Low confidence!')
     else:
         print("Finger not found")
 
 def delete_fingerprint():
-    l = get_num()
+    i = delete_get_num()
     get_fingerprint()
     print(finger.finger_id)
-    if finger.finger_id == l or finger.finger_id == (l+63):
-        finger.delete_model(l)
-        finger.delete_model(l + 63)
+    if finger.finger_id == i:
+        delete_name(i)
+        finger.delete_model(i)
+        finger.delete_model(i + 63)
         print("Deleted!")
     else:
         print("Failed to delete")
+
+def force_delete_fingerprint():
+    i = delete_get_num()
+    #delete_name(i)
+    finger.delete_model(i)
+    #finger.delete_model(i + 63)
